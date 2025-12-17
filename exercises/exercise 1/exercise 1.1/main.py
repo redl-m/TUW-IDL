@@ -86,7 +86,7 @@ class BinaryClassifier(nn.Module):
         # ReLU activation for the hidden layer
         self.relu = nn.ReLU()
         # Hidden layer to the single output neuron
-        self.fc2 = nn.Linear(hidden_size, 1)
+        self.fc2 = nn.Linear(hidden_size, 1) # output = 1 means output layer ("one node")
         # Sigmoid activation for binary classification (outputs probability 0-1)
         self.sigmoid = nn.Sigmoid()
 

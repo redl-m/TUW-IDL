@@ -9,6 +9,8 @@ from sklearn.metrics import recall_score, accuracy_score, f1_score
 from tqdm import tqdm
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification, Wav2Vec2Config
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
 # ==========================================
 # 1. DATASET DEFINITION (RAVDESS)
 # ==========================================
@@ -58,7 +60,7 @@ def create_ser_model(num_labels=8):
 # ==========================================
 def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🚀 Training starting on: {device}")
+    print(f"🚀 Training starting on: {device} ({torch.cuda.get_device_name(0)})")
 
     # Use the absolute path logic to find your data
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -107,9 +109,12 @@ def train():
         print(f"📊 Epoch {epoch+1} Results -> Accuracy: {acc:.4f}, UAR: {uar:.4f}")
 
     # Save for final evaluation scripts [cite: 25]
-    os.makedirs("../models", exist_ok=True)
-    torch.save(model.state_dict(), "../models/ser_model.pt")
-    print("✅ Training complete! Model saved to models/ser_model.pt")
+    save_dir = os.path.join(script_dir, "..", "models")
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, "ser_model.pt")
+
+    torch.save(model.state_dict(), save_path)
+    print(f"✅ Training complete! Model saved to: {os.path.abspath(save_path)}")
 
 if __name__ == "__main__":
     train()

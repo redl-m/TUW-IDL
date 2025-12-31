@@ -19,3 +19,4 @@ pyyaml>=6.0.1
 
 # Dataset Access
 kagglehub>=0.3.0
+seaborn

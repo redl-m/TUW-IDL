@@ -17,34 +17,21 @@ class AudioPreprocessor:
         )
         self.mfcc = T.MFCC(sample_rate=target_sr, n_mfcc=40)
 
-    def process_file(self, input_path, output_path, feature_type="log_mel"):
-        # 1. Load & Resample
+    def process_file(self, input_path, output_path):
         waveform, sr = torchaudio.load(input_path)
         if sr != self.target_sr:
             waveform = T.Resample(sr, self.target_sr)(waveform)
 
-        # 2. Mono conversion
-        if waveform.shape[0] > 1:
-            waveform = torch.mean(waveform, dim=0, keepdim=True)
-
-        # 3. Trimming / Padding (Standardize length)
+        # Standardize length (3 seconds = 48,000 samples at 16kHz)
         if waveform.shape[1] > self.num_samples:
             waveform = waveform[:, :self.num_samples]
         else:
             padding = self.num_samples - waveform.shape[1]
             waveform = torch.nn.functional.pad(waveform, (0, padding))
 
-        # 4. Feature Extraction
-        if feature_type == "log_mel":
-            features = self.mel_spectrogram(waveform)
-            features = torch.log(features + 1e-9)
-        elif feature_type == "mfcc":
-            features = self.mfcc(waveform)
-        else:
-            features = waveform  # Raw for Wav2Vec2
-
-        # 5. Save as PyTorch tensor (faster than reloading WAVs)
-        torch.save(features, output_path.with_suffix(".pt"))
+        # SAVE THE RAW WAVEFORM
+        # Shape will be [1, 48000]
+        torch.save(waveform, output_path.with_suffix(".pt"))
 
 
 def run_preprocessing():

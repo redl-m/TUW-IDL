@@ -1,28 +1,44 @@
 import os
 import glob
 import torch
-import librosa
+from pathlib import Path
 from torch.utils.data import Dataset
-from transformers import Wav2Vec2FeatureExtractor
 
 
 class RAVDESSEmotionDataset(Dataset):
-    def __init__(self, data_path, processor_name="facebook/wav2vec2-base", max_duration=3.0):
-        # Convert to absolute path to avoid Windows location issues
-        self.data_path = os.path.abspath(data_path)
-        self.max_duration = max_duration
-        self.sampling_rate = 16000
+    def __init__(self, data_path: str):
+        self.data_path = Path(data_path)
+        # Recursively find all processed .pt files
+        self.file_list = list(self.data_path.rglob("*.pt"))
 
-        self.processor = Wav2Vec2FeatureExtractor.from_pretrained(processor_name)
+        print(f"📊 Found {len(self.file_list)} processed files in {self.data_path}")
 
-        self.emotion_map = {
-            '01': 'neutral', '02': 'calm', '03': 'happy', '04': 'sad',
-            '05': 'angry', '06': 'fearful', '07': 'disgust', '08': 'surprised'
+        # Standard RAVDESS Mapping
+        self.label2id = {
+            "neutral": 0, "calm": 1, "happy": 2, "sad": 3,
+            "angry": 4, "fearful": 5, "disgust": 6, "surprised": 7
         }
-        self.label2id = {label: i for i, label in enumerate(self.emotion_map.values())}
 
-        print(f"🔍 Searching for .wav files in: {self.data_path}")
-        self.file_list = self._load_metadata()
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        file_path = self.file_list[idx]
+        # Load the waveform
+        waveform = torch.load(file_path, weights_only=True)
+
+        # 1. Handle stereo to mono: If [2, 48000], take the mean or first channel
+        if waveform.dim() > 1 and waveform.shape[0] > 1:
+            waveform = torch.mean(waveform, dim=0)
+
+            # 2. Ensure it is strictly 1D [sequence_length]
+        # This removes any remaining singleton dimensions like [1, 48000] -> [48000]
+        waveform = waveform.flatten()
+
+        return {
+            "input_values": waveform,
+            "labels": torch.tensor(int(file_path.stem.split("-")[2]) - 1, dtype=torch.long)
+        }
 
     def _load_metadata(self):
         # Use a more robust search pattern to find files deep in subdirectories
@@ -41,30 +57,6 @@ class RAVDESSEmotionDataset(Dataset):
                         "label": self.label2id[self.emotion_map[emotion_id]]
                     })
         return metadata
-
-    def __len__(self):
-        return len(self.file_list)
-
-    def __getitem__(self, idx):
-        if len(self.file_list) == 0:
-            raise RuntimeError(f"No files found in {self.data_path}. Check your folder structure!")
-
-        item = self.file_list[idx]
-        speech, _ = librosa.load(item['path'], sr=self.sampling_rate)
-
-        # Trimming/Padding as per project requirements
-        max_length = int(self.sampling_rate * self.max_duration)
-        if len(speech) > max_length:
-            speech = speech[:max_length]
-        else:
-            speech = librosa.util.fix_length(speech, size=max_length)
-
-        inputs = self.processor(speech, sampling_rate=self.sampling_rate, return_tensors="pt")
-
-        return {
-            "input_values": inputs.input_values.squeeze(0),
-            "labels": torch.tensor(item['label'], dtype=torch.long)
-        }
 
 
 if __name__ == "__main__":

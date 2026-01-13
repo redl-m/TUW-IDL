@@ -24,7 +24,7 @@ def evaluate_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 1. Load Data and Model using the new absolute paths
-    dataset = RAVDESSEmotionDataset(data_path=str(data_path))
+    dataset = RAVDESSEmotionDataset(data_path=str(data_path), split="test")
 
     if len(dataset) == 0:
         print(f"❌ Error: No files found in {data_path}")

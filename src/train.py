@@ -11,53 +11,9 @@ from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassifica
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# ==========================================
-# 1. DATASET DEFINITION (RAVDESS)
-# ==========================================
-class RAVDESSEmotionDataset(Dataset):
-    def __init__(self, data_path, processor_name="facebook/wav2vec2-base", max_duration=3.0):
-        self.data_path = os.path.abspath(data_path)
-        self.max_duration = max_duration
-        self.sampling_rate = 16000 # Required for wav2vec 2.0 [cite: 6, 30]
-        self.processor = Wav2Vec2FeatureExtractor.from_pretrained(processor_name)
-        self.emotion_map = {'01':'neutral', '02':'calm', '03':'happy', '04':'sad',
-                            '05':'angry', '06':'fearful', '07':'disgust', '08':'surprised'}
-        self.label2id = {label: i for i, label in enumerate(self.emotion_map.values())}
-        self.file_list = self._load_metadata()
+from datasets import RAVDESSEmotionDataset
+from model import create_ser_model
 
-    def _load_metadata(self):
-        search_pattern = os.path.join(self.data_path, "**", "*.wav")
-        files = glob.glob(search_pattern, recursive=True)
-        metadata = []
-        for f in files:
-            parts = os.path.basename(f).split('-')
-            if len(parts) >= 3:
-                emotion_id = parts[2]
-                if emotion_id in self.emotion_map:
-                    metadata.append({"path": f, "label": self.label2id[self.emotion_map[emotion_id]]})
-        return metadata
-
-    def __len__(self): return len(self.file_list)
-
-    def __getitem__(self, idx):
-        item = self.file_list[idx]
-        speech, _ = librosa.load(item['path'], sr=self.sampling_rate)
-        max_length = int(self.sampling_rate * self.max_duration)
-        speech = librosa.util.fix_length(speech, size=max_length) # Standard preprocessing [cite: 13]
-        inputs = self.processor(speech, sampling_rate=self.sampling_rate, return_tensors="pt", padding=True)
-        return {"input_values": inputs.input_values.squeeze(0), "labels": torch.tensor(item['label'], dtype=torch.long)}
-
-# ==========================================
-# 2. MODEL DEFINITION (Option B: wav2vec 2.0)
-# ==========================================
-def create_ser_model(num_labels=8):
-    # Fine-tuning a wav2vec 2.0 style encoder with a classification head [cite: 15, 34]
-    model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-base", num_labels=num_labels)
-    return model
-
-# ==========================================
-# 3. TRAINING ENGINE
-# ==========================================
 def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🚀 Training starting on: {device} ({torch.cuda.get_device_name(0)})")
@@ -65,16 +21,10 @@ def train():
     # Use the absolute path logic to find your data
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
-    data_path = os.path.join(project_root, "data", "raw")
+    data_path = os.path.join(project_root, "data", "processed")
 
-    full_dataset = RAVDESSEmotionDataset(data_path=data_path)
-    if len(full_dataset) == 0:
-        print(f"❌ Error: No files found at {data_path}")
-        return
-
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_ds, val_ds = random_split(full_dataset, [train_size, val_size])
+    train_ds = RAVDESSEmotionDataset(data_path, split="train")
+    val_ds = RAVDESSEmotionDataset(data_path, split="val")
 
     train_loader = DataLoader(train_ds, batch_size=4, shuffle=True) # Small batch for CPU/lower RAM
     val_loader = DataLoader(val_ds, batch_size=4)
@@ -83,7 +33,14 @@ def train():
     optimizer = AdamW(model.parameters(), lr=1e-5)
     criterion = nn.CrossEntropyLoss()
 
-    for epoch in range(3): # Project suggests reporting metrics per epoch
+    # Save for final evaluation scripts
+    save_dir = os.path.join(script_dir, "..", "models")
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, "ser_model.pt")
+
+    best_uar = 0.0
+
+    for epoch in range(5): # Project suggests reporting metrics per epoch
         model.train()
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
             optimizer.zero_grad()
@@ -108,13 +65,12 @@ def train():
         acc = accuracy_score(all_labels, all_preds)
         print(f"📊 Epoch {epoch+1} Results -> Accuracy: {acc:.4f}, UAR: {uar:.4f}")
 
-    # Save for final evaluation scripts [cite: 25]
-    save_dir = os.path.join(script_dir, "..", "models")
-    os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, "ser_model.pt")
+        if uar > best_uar:
+            best_uar = uar
+            torch.save(model.state_dict(), save_path)
+            print(f"   🔥 New Best Model Found! Saved to {os.path.basename(save_path)}")
 
-    torch.save(model.state_dict(), save_path)
-    print(f"✅ Training complete! Model saved to: {os.path.abspath(save_path)}")
+    print(f"✅ Training complete! Best UAR achieved: {best_uar:.4f}")
 
 if __name__ == "__main__":
     train()

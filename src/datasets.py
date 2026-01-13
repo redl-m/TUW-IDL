@@ -6,12 +6,9 @@ from torch.utils.data import Dataset
 
 
 class RAVDESSEmotionDataset(Dataset):
-    def __init__(self, data_path: str):
+    def __init__(self, data_path: str, split="train"):
         self.data_path = Path(data_path)
-        # Recursively find all processed .pt files
-        self.file_list = list(self.data_path.rglob("*.pt"))
-
-        print(f"📊 Found {len(self.file_list)} processed files in {self.data_path}")
+        self.split = split
 
         # Standard RAVDESS Mapping
         self.label2id = {
@@ -19,11 +16,20 @@ class RAVDESSEmotionDataset(Dataset):
             "angry": 4, "fearful": 5, "disgust": 6, "surprised": 7
         }
 
+        self.emotion_map = {
+            "01": "neutral", "02": "calm", "03": "happy", "04": "sad",
+            "05": "angry", "06": "fearful", "07": "disgust", "08": "surprised"
+        }
+
+        # Load all data filtering everything out
+        self.file_list = self._load_metadata()
+
     def __len__(self):
         return len(self.file_list)
 
     def __getitem__(self, idx):
         file_path = self.file_list[idx]
+
         # Load the waveform
         waveform = torch.load(file_path, weights_only=True)
 
@@ -31,43 +37,54 @@ class RAVDESSEmotionDataset(Dataset):
         if waveform.dim() > 1 and waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0)
 
-            # 2. Ensure it is strictly 1D [sequence_length]
+        # 2. Ensure it is strictly 1D [sequence_length]
         # This removes any remaining singleton dimensions like [1, 48000] -> [48000]
         waveform = waveform.flatten()
 
+        parts = file_path.name.split('-')
+        emotion_code = parts[2]
+
+        label_name = self.emotion_map.get(emotion_code)
+        label_id = self.label2id[label_name]
+
         return {
             "input_values": waveform,
-            "labels": torch.tensor(int(file_path.stem.split("-")[2]) - 1, dtype=torch.long)
+            "labels": torch.tensor(label_id, dtype=torch.long)
         }
 
     def _load_metadata(self):
         # Use a more robust search pattern to find files deep in subdirectories
-        search_pattern = os.path.join(self.data_path, "**", "*.wav")
+        search_pattern = os.path.join(self.data_path, "**", "*.pt")
         files = glob.glob(search_pattern, recursive=True)
-
         metadata = []
+
+        train_actors = set(range(1, 21))
+        val_actors = set(range(21, 23))
+        test_actors = set(range(23, 25))
+
         for f in files:
-            # RAVDESS format: 03-01-06-... (3rd element is emotion)
             parts = os.path.basename(f).split('-')
-            if len(parts) >= 3:
-                emotion_id = parts[2]
-                if emotion_id in self.emotion_map:
-                    metadata.append({
-                        "path": f,
-                        "label": self.label2id[self.emotion_map[emotion_id]]
-                    })
+            actor_id = int(parts[6].split('.')[0])  # The last part is actor ID
+            emotion_code = parts[2]
+
+            # FILTER: Skip files not in the current split
+            if self.split == "train" and actor_id not in train_actors: continue
+            if self.split == "val" and actor_id not in val_actors: continue
+            if self.split == "test" and actor_id not in test_actors: continue
+
+            if emotion_code in self.emotion_map:
+                metadata.append(Path(f))
         return metadata
 
 
 if __name__ == "__main__":
-    # Use 'data/raw' relative to where you run the script
-    dataset = RAVDESSEmotionDataset(data_path="../data/raw")
+    dataset = RAVDESSEmotionDataset(data_path="../data/processed")
+    dataset._load_metadata()
 
     if len(dataset) > 0:
-        print(f"✅ Success! Found {len(dataset)} audio files.")
         sample = dataset[0]
         print(f"Input Shape: {sample['input_values'].shape}")
         print(f"Label ID: {sample['labels'].item()}")
         print(f"Mapping: {dataset.label2id}")
     else:
-        print("❌ Still found 0 files. Please check if 'data/raw' contains 'Actor_XX' folders.")
+        print("Please check if 'data/raw' contains 'Actor_XX' folders, if not download them using download_data.py")

@@ -1,4 +1,3 @@
-import os
 import torch
 import torchaudio
 import torchaudio.transforms as T
@@ -19,6 +18,8 @@ class AudioPreprocessor:
 
     def process_file(self, input_path, output_path):
         waveform, sr = torchaudio.load(input_path)
+
+        # Decrease 48kHz to 16kHz
         if sr != self.target_sr:
             waveform = T.Resample(sr, self.target_sr)(waveform)
 
@@ -29,8 +30,7 @@ class AudioPreprocessor:
             padding = self.num_samples - waveform.shape[1]
             waveform = torch.nn.functional.pad(waveform, (0, padding))
 
-        # SAVE THE RAW WAVEFORM
-        # Shape will be [1, 48000]
+        # SAVE THE RAW WAVEFORM - Shape will be [1, 48000]
         torch.save(waveform, output_path.with_suffix(".pt"))
 
 
@@ -44,7 +44,7 @@ def run_preprocessing():
 
     # Find all .wav files recursively
     audio_files = list(raw_dir.rglob("*.wav"))
-    print(f"🔍 Found {len(audio_files)} files. Starting preprocessing...")
+    print(f"Found {len(audio_files)} audio files. Starting preprocessing...")
 
     for audio_path in tqdm(audio_files):
         # Create matching subfolder structure in 'processed'
@@ -55,7 +55,7 @@ def run_preprocessing():
         try:
             preprocessor.process_file(audio_path, output_path)
         except Exception as e:
-            print(f"❌ Error processing {audio_path.name}: {e}")
+            print(f"Error processing {audio_path.name}: {e}")
 
 
 if __name__ == "__main__":

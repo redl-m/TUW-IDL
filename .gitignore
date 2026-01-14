@@ -210,3 +210,4 @@ data
 shell.nix
 models
 results/confusion_matrix.png
+results

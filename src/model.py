@@ -20,16 +20,15 @@ def create_ser_model(num_labels=8, model_name="facebook/wav2vec2-base"):
         config=config
     )
 
+    # Freeze the feature extractor to save memory and training time
+    model.freeze_feature_extractor()
+
     return model
 
-# Example of how you would use this in train.py:
-model = create_ser_model(num_labels=8)
-
 if __name__ == "__main__":
-    # Create a dummy version of the model
     model = create_ser_model(num_labels=8)
 
     # Print the model summary
-    print("✅ Model successfully initialized!")
+    print("Model successfully initialized!")
     print(f"Model type: {type(model)}")
     print(f"Number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")

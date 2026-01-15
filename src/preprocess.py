@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import torch
 import torchaudio
 import torchaudio.transforms as T

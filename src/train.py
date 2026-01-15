@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import numpy as np
 import os
 import torch
@@ -10,6 +12,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 from datasets import RAVDESSEmotionDataset
 from model import create_ser_model
 
+#TODO: implement additional model
+# create graph of training loss and accuracy or table
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
@@ -46,7 +50,8 @@ def train():
         weight_decay=0.01,
         load_best_model_at_end=True,
         fp16=torch.cuda.is_available(),
-        report_to=[]
+        report_to=[],
+        remove_unused_columns=False
     )
 
     # Set up the trainer

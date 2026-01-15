@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import torch.nn as nn
 from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Config
 

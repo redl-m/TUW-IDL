@@ -1,0 +1,33 @@
+# Use the official NVIDIA CUDA base image
+FROM nvidia/cuda:13.1.0-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+        software-properties-common \
+        curl \
+        git \
+        ffmpeg \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+        python3.13 \
+        python3.13-venv \
+        python3.13-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3.13 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+WORKDIR /workspace
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY src ./src
+
+COPY download_data.py .
+RUN python download_data.py && \
+    rm -r /workspace/data/raw/audio_speech_actors_01-24
+
+CMD ["bash"]

@@ -6,15 +6,23 @@ import torch
 from pathlib import Path
 from torch.utils.data import Dataset
 from transformers import Wav2Vec2FeatureExtractor
-
+from audiomentations import Compose, AddGaussianNoise, PitchShift, Gain
 
 class RAVDESSEmotionDataset(Dataset):
-    def __init__(self, data_path: str, split="train"):
+    def __init__(self, data_path: str, split="train", sampling_rate=16000, max_length=3):
         self.data_path = Path(data_path)
         self.split = split
+        self.sampling_rate = sampling_rate
+        self.max_length = max_length
 
         # Initialize processor
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base')
+
+        self.augmentations = Compose([
+            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
+            PitchShift(min_semitones=-4, max_semitones=4, p=0.3),
+            Gain(min_gain_db=-12, max_gain_db=12, p=0.5),
+        ])
 
         self.label2id = {
             "neutral": 0, "calm": 1, "happy": 2, "sad": 3,
@@ -41,15 +49,23 @@ class RAVDESSEmotionDataset(Dataset):
         if waveform.dim() > 1:
             waveform = waveform.reshape(-1)
 
+        # Apply augmentation
+        if self.split == "train":
+            waveform = self.augmentations(waveform, sample_rate=self.sampling_rate)
+
         # Use the processor for normalization
-        input_values = self.processor(
+        inputs = self.processor(
             waveform,
-            sampling_rate=16000,
-            padding=True,
+            sampling_rate=self.sampling_rate,
+            padding="max_length",
             truncation=True,
-            max_length=48000,
-            return_tensors="pt"
-        ).input_values.squeeze()
+            max_length=self.sampling_rate * self.max_length,
+            return_tensors="pt",
+            return_attention_mask=True
+        )
+
+        input_values = inputs.input_values.squeeze()
+        attention_mask = inputs.attention_mask.squeeze()
 
         # Extract emotion code from the filename
         parts = file_path.name.split('-')
@@ -60,6 +76,7 @@ class RAVDESSEmotionDataset(Dataset):
 
         return {
             "input_values": input_values,
+            "attention_mask": attention_mask,
             "labels": torch.tensor(label_id, dtype=torch.long)
         }
 

@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 from utils.paths import DATA_RAW_DIR, DATA_PROCESSED_DIR, ensure_paths
-
-from preprocessors.waveform import AudioWaveformPreprocessor
-from preprocessors.features import AudioFeatureExtractor
-from preprocessors.base import AudioFilePreprocessor
+from preprocessors import AudioWaveformPreprocessor, AudioFeatureExtractor, AudioFilePreprocessor
 
 import sys
 from tqdm import tqdm

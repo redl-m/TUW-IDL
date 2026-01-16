@@ -13,6 +13,7 @@ services:
       - ./results:/workspace/results
       - ./models:/workspace/models
       - ./data:/workspace/data
+      - ./cache:/workspace/cache
     stdin_open: true
     tty: true
     deploy:
@@ -38,6 +39,7 @@ services:
       - ./results:/workspace/results
       - ./models:/workspace/models
       - ./data:/workspace/data
+      - ./cache:/workspace/cache
     stdin_open: true
     tty: true
     deploy:

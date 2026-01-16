@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from .base import AudioFilePreprocessor
-from .waveform import AudioWaveformPreprocessor
-from .features import AudioFeatureExtractor
+from preprocessors.base import AudioFilePreprocessor
+from preprocessors.waveform import AudioWaveformPreprocessor
+from preprocessors.features import AudioFeatureExtractor
 
 __all__ = ["AudioFilePreprocessor", "AudioWaveformPreprocessor", "AudioFeatureExtractor"]

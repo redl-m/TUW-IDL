@@ -6,7 +6,7 @@ if [ -z "$LOCAL_UID" ]; then
     exec "$@" # no local set continue as root
 else
     echo "Running as user: $LOCAL_UID"
-    for DIR in /workspace/data /workspace/models /workspace/results; do
+    for DIR in /workspace/data /workspace/models /workspace/results /workspace/cache; do
         if [ -d "$DIR" ]; then
             chown -R "$LOCAL_UID" "$DIR"
         fi

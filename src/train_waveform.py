@@ -3,6 +3,10 @@
 import os
 import sys
 
+from loaders import WaveformDataset
+from models import create_wav2vec2_model
+from utils.paths import RESULTS_DIR, MODELS_DIR, ensure_paths
+
 import numpy as np
 import pandas as pd
 
@@ -13,16 +17,10 @@ import torch
 from sklearn.metrics import recall_score, accuracy_score
 from transformers import Trainer, TrainingArguments
 
-from datasets import RAVDESSEmotionDataset
-from model import create_ser_model
-
 import warnings
 if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
-
-# Ensure local imports work
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
@@ -33,23 +31,21 @@ def compute_metrics(eval_pred):
 
     return {"accuracy": acc, "uar": uar}
 
-
 def train():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    data_path = os.path.join(project_root, "data", "processed")
-    model_output_dir = os.path.join(project_root, "results")
+    model_path = MODELS_DIR / "best_waveform_model"
+    waveform_results_path = RESULTS_DIR / "waveform"
+    ensure_paths([waveform_results_path, model_path])
 
     # Load datasets
-    train_ds = RAVDESSEmotionDataset(data_path, split="train")
-    val_ds = RAVDESSEmotionDataset(data_path, split="val")
+    train_ds = WaveformDataset(split="train")
+    val_ds = WaveformDataset(split="val")
 
     # Initialize model with 8 labels
-    model = create_ser_model(num_labels=8)
+    model = create_wav2vec2_model(num_labels=8)
 
     # Define training arguments
     training_args = TrainingArguments(
-        output_dir=model_output_dir,
+        output_dir=waveform_results_path,
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="epoch",
@@ -77,11 +73,10 @@ def train():
     trainer.train()
 
     # Save the final model
-    final_save_path = os.path.join(project_root, "models", "best_ser_model_trainer")
-    trainer.save_model(final_save_path)
+    trainer.save_model(model_path)
 
     metrics = trainer.evaluate()
-    print(f"Best model with accuracy of {metrics['eval_accuracy']:.4f} saved to: {final_save_path}")
+    print(f"Best model with accuracy of {metrics['eval_accuracy']:.4f} saved to: {model_path}")
 
     history = trainer.state.log_history
 
@@ -99,7 +94,7 @@ def train():
     pd.set_option('display.width', 1000)
 
     # Save metrics to CSV
-    df_metrics.to_csv(os.path.join(model_output_dir, "training_logs.csv"), index=False)
+    df_metrics.to_csv(os.path.join(waveform_results_path, "training_logs_waveform.csv"), index=False)
 
     # Plot the Results
     plt.figure(figsize=(12, 5))
@@ -125,7 +120,7 @@ def train():
     plt.tight_layout()
 
     # Save the plot
-    plot_path = os.path.join(model_output_dir, "training_history.png")
+    plot_path = os.path.join(waveform_results_path, "training_history_waveform.png")
     plt.savefig(plot_path)
     print(f"\nTraining plots saved to: {plot_path}")
 

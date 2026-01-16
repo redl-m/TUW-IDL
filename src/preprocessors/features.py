@@ -31,7 +31,9 @@ class AudioFeatureExtractor(AudioFilePreprocessor):
 
         # Mel Spectrogram
         mel_spectrogram = lf.melspectrogram(S=stft ** 2, sr=self.sample_rate)
-        mel = np.mean(mel_spectrogram, axis=1)
+        mel_mean = np.mean(mel_spectrogram, axis=1)
+        mel_std = np.std(mel_spectrogram, axis=1)
+        mel_max = np.max(mel_spectrogram, axis=1)
 
         # MFCC
         mel_db = librosa.power_to_db(mel_spectrogram)
@@ -41,7 +43,7 @@ class AudioFeatureExtractor(AudioFilePreprocessor):
         rms = np.mean(lf.rms(S=stft), axis=1)
 
         # Concatenate all
-        return np.concatenate([zcr, chroma, mfcc, rms, mel])
+        return np.concatenate([zcr, chroma, mfcc, rms, mel_mean, mel_max, mel_std])
 
     def _noise(self, data: np.ndarray) -> np.ndarray:
         """

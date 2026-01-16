@@ -6,6 +6,8 @@ services:
     image: dl-dev
     container_name: dl-dev
     working_dir: /workspace
+    environment:
+      - LOCAL_UID=${CURRENT_UID}
     volumes:
       - ./src:/workspace/src
       - ./results:/workspace/results
@@ -29,6 +31,8 @@ services:
     image: dl-dev
     container_name: dl-dev
     working_dir: /workspace
+    environment:
+      - LOCAL_UID=${CURRENT_UID}
     volumes:
       - ./src:/workspace/src
       - ./results:/workspace/results

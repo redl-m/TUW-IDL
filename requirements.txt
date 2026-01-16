@@ -1,3 +1,4 @@
+audiomentations>=0.43.1
 datasets>=4.5.0
 kagglehub>=0.4.0
 matplotlib>=3.10.8
@@ -9,8 +10,6 @@ torchaudio>=2.9.1
 torchcodec>=0.9.1
 tqdm>=4.67.1
 transformers>=4.57.5
-
-# currently not in use but might be needed later
 accelerate>=1.12.0
 librosa>=0.11.0
 pandas>=2.3.3

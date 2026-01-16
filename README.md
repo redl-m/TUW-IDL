@@ -41,9 +41,16 @@ We provide a Docker container to ensure a reproducible environment with GPU supp
     ```bash
    docker build -t dl-dev .
    ```
+   
+    or with docker compose:
+
+    ```bash
+    docker compose build
+    ```
 2. Run the container: this command mounts important directories so changes persist.
     In addition, also the src directory gets mounted, such that the docker container 
     must not be restarted for every change.
+
     ```bash
     docker run --gpus all -it \
       -v "$(pwd)/results:/workspace/results" \
@@ -58,7 +65,20 @@ We provide a Docker container to ensure a reproducible environment with GPU supp
     needing to connect to the container manually:
 
     ```bash
-    docker compose run python python src/script.py
+    docker compose run --rm python python src/script.py
+    ```
+   
+    For an interactive shell in the docker container, you can use:
+
+    ```bash
+    docker compose run --rm --entrypoint bash python-nx  
+    ```
+   
+    As docker is per default ran as root, newly created files will be owned by root.
+    To fix this, you can run:
+
+    ```bash
+    CURRENT_UID=$(id -u):$(id -g) docker compose run --rm python-nx bash
     ```
    
 NOTE: The gpu support only works on linux if `nvidia-container-toolkit` is installed.
@@ -100,6 +120,6 @@ docker compose run --rm --entrypoint bash python
 ### NIXOS
 
 A `shell.nix` file is also available, though only recommended for experienced users 
-with nix/linux. Furthermore, the usual `python` service in `docker-compose.yml` will 
-not work. Thus, use `python-nx`. For further information take a look at
+with nix/linux. Furthermore, the default `python` service in `docker-compose.yml` will 
+not work on nixos. Thus, use `python-nx`. For further information take a look at
 [source](https://discourse.nixos.org/t/nvidia-docker-container-runtime-doesnt-detect-my-gpu/51336/15).

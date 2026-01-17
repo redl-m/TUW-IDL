@@ -1,62 +1,75 @@
 #!/usr/bin/env python3
 
+import torch
 import torch.nn as nn
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, hidden_dim, dropout):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim)
-        )
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        residual = x
-        out = self.block(x)
-        out += residual  # Skip connection
-        return self.relu(out)
-
-
-class SimpleAudioClassifier(nn.Module):
-    def __init__(self, input_dim: int, num_labels: int, hidden_dim: int = 512, dropout: float = 0.3):
+class CNN1DClassifier(nn.Module):
+    def __init__(self, input_dim: int, num_labels: int):
         super().__init__()
 
-        # Project input up to hidden dimension
-        self.initial_layer = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+        # Keras: Conv1D(256, 5, strides=1, padding='same')
+        # PyTorch Conv1d expects input shape: (Batch, Channels, Length)
+        # We will reshape input in forward() to (Batch, 1, 162)
+
+        self.features = nn.Sequential(
+            nn.Conv1d(in_channels=1, out_channels=256, kernel_size=5, stride=1, padding=2),
             nn.ReLU(),
-            nn.Dropout(dropout)
+            nn.MaxPool1d(kernel_size=5, stride=2, padding=2),
+
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=5, stride=2, padding=2),
+
+            nn.Conv1d(in_channels=256, out_channels=128, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=5, stride=2, padding=2),
+
+            nn.Dropout(0.2),
+
+            nn.Conv1d(in_channels=128, out_channels=64, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=5, stride=2, padding=2)
         )
 
-        # Stack of Residual Blocks (ResNet-style MLP)
-        self.res_blocks = nn.Sequential(
-            ResidualBlock(hidden_dim, dropout),
-            ResidualBlock(hidden_dim, dropout),
-            ResidualBlock(hidden_dim, dropout)
-        )
+        # Flattening logic:
+        # We need to calculate the size after all those pooling layers.
+        # For input 162:
+        # After Pool 1 (~/2) -> ~81
+        # After Pool 2 (~/2) -> ~41
+        # After Pool 3 (~/2) -> ~21
+        # After Pool 4 (~/2) -> ~11
+        # Final shape is roughly (64 channels * 11 length) = 704
+        # We use a lazy linear layer or calculate it dynamically.
 
-        # Classification Head
+        self.flatten = nn.Flatten()
+
+        # We use a dummy pass in __init__ to determine the exact flattened size
+        # This makes the model flexible to any input_dim (162, 190, etc.)
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, 1, input_dim)
+            dummy_output = self.features(dummy_input)
+            flattened_size = dummy_output.view(1, -1).shape[1]
+
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.Linear(flattened_size, 32),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, num_labels)
+            nn.Dropout(0.3),
+            nn.Linear(32, num_labels)
         )
 
     def forward(self, x):
-        x = self.initial_layer(x)
-        x = self.res_blocks(x)
-        return self.classifier(x)
+        # x comes in as (Batch, 162)
+        # Conv1D needs (Batch, Channel, Length) -> (Batch, 1, 162)
+        x = x.unsqueeze(1)
+
+        x = self.features(x)
+        x = self.flatten(x)
+        x = self.classifier(x)
+        return x
 
 if __name__ == "__main__":
-    model = SimpleAudioClassifier(input_dim=784, num_labels=8)
+    model = CNN1DClassifier(input_dim=784, num_labels=8)
 
     # Print the model summary
     print("Model successfully initialized!")

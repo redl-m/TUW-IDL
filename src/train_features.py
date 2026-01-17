@@ -33,7 +33,7 @@ def train():
 
     # Hyperparameters
     BATCH_SIZE = 64
-    LEARNING_RATE = 0.0001
+    LEARNING_RATE = 1e-3
     EPOCHS = 50
 
     try:
@@ -72,7 +72,7 @@ def train():
     input_dim = sample_input.shape[0]
     num_labels = 8
 
-    model = CNN1DClassifier(input_dim=input_dim, num_labels=num_labels).to(device)
+    model = SimpleAudioClassifier(input_dim=input_dim, num_labels=num_labels).to(device)
 
     criterion = nn.CrossEntropyLoss(weight=weights_tensor)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)

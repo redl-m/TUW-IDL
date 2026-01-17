@@ -6,6 +6,7 @@ import sys
 from loaders import WaveformDataset
 from models import create_wav2vec2_model
 from utils.paths import RESULTS_DIR, MODELS_DIR, ensure_paths
+from utils.config import LABEL2ID
 
 import numpy as np
 import pandas as pd
@@ -14,13 +15,37 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 import torch
+import torch.nn as nn
 from sklearn.metrics import recall_score, accuracy_score
 from transformers import Trainer, TrainingArguments
+from collections import Counter
 
 import warnings
 if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
+
+class WeightedTrainer(Trainer):
+    def __init__(self, class_weights, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.class_weights = class_weights
+
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        """
+        Override the default loss computation to use Weighted Cross Entropy.
+        Everything else stays the same and is inherited from Trainer
+        """
+        labels = inputs.get("labels")
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
+
+        weight_tensor = self.class_weights.to(logits.device)
+
+        # Compute weighted loss
+        loss_fct = nn.CrossEntropyLoss(weight=weight_tensor)
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+
+        return (loss, outputs) if return_outputs else loss
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
@@ -39,6 +64,26 @@ def train():
     # Load datasets
     train_ds = WaveformDataset(split="train")
     val_ds = WaveformDataset(split="val")
+
+    # weight calculations
+    label_counts = Counter()
+    for f in train_ds.files:
+        l = train_ds._get_label(f)
+        label_counts[l] += 1
+
+    class_weights = []
+    total_samples = sum(label_counts.values())
+    num_classes = len(LABEL2ID)
+
+    for i in range(num_classes):
+        count = label_counts.get(i, 0)
+        if count == 0:
+            weight = 1.0
+        else:
+            weight = total_samples / (num_classes * count)
+        class_weights.append(weight)
+
+    class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32)
 
     # Initialize model with 8 labels
     model = create_wav2vec2_model(num_labels=8)
@@ -61,7 +106,8 @@ def train():
     )
 
     # Set up the trainer
-    trainer = Trainer(
+    trainer = WeightedTrainer(
+        class_weights=class_weights_tensor,
         model=model,
         args=training_args,
         train_dataset=train_ds,

@@ -6,15 +6,17 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from collections import Counter
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import recall_score, accuracy_score
 
-from models import SimpleAudioClassifier
+from models import CNN1DClassifier
 from loaders import FeatureDataset
 from utils.paths import RESULTS_DIR, MODELS_DIR, ensure_paths
+from utils.config import LABEL2ID
 
 import warnings
 
@@ -41,6 +43,26 @@ def train():
         print(f"Error loading datasets. Ensure 'preprocess.py' was run. Details: {e}")
         return
 
+    # weight calculations
+    label_counts = Counter()
+    for f in train_ds.files:
+        l = train_ds._get_label(f)
+        label_counts[l] += 1
+
+    class_weights = []
+    total_samples = sum(label_counts.values())
+    num_classes = len(LABEL2ID)
+
+    for i in range(num_classes):
+        count = label_counts.get(i, 0)
+        if count == 0:
+            weight = 1.0
+        else:
+            weight = total_samples / (num_classes * count)
+        class_weights.append(weight)
+
+    weights_tensor = torch.tensor(class_weights).float().to(device)
+
     # Create standard PyTorch DataLoaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
@@ -50,11 +72,9 @@ def train():
     input_dim = sample_input.shape[0]
     num_labels = 8
 
-    print(f"Input Dim: {input_dim}, Labels: {num_labels}")
-
     model = SimpleAudioClassifier(input_dim=input_dim, num_labels=num_labels).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=weights_tensor)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     best_val_acc = 0.0
@@ -120,6 +140,7 @@ def train():
             save_file = model_path / "model_weights.pth"
             torch.save(model.state_dict(), save_file)
 
+    print(f"Best model with validation accuracy: {best_val_acc}")
     df_metrics = pd.DataFrame(history)
 
     csv_path = os.path.join(feature_results_path, "training_logs_features.csv")

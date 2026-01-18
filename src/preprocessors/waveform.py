@@ -8,9 +8,13 @@ import torchaudio.transforms as T
 
 
 class AudioWaveformPreprocessor(AudioFilePreprocessor):
+    """
+    Preprocesses raw audio files into fixed length tensors. It handles resampling
+    to 16kHz, converting stereo to mono, and padding/truncating.
+    """
     def __init__(self, target_sr: int = 16000, duration_sec: float = 3.0) -> None:
         """
-        Initializes the audio preprocessor and sets up values used later on.
+        Initializes the waveform preprocessor.
         """
         self.target_sr = target_sr
         self.num_samples = int(target_sr * duration_sec)

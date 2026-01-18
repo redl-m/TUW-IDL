@@ -5,13 +5,27 @@ from loaders.base import BaseRAVDESSDataset
 import torch
 import numpy as np
 
+from typing import Any, Dict
+
 
 class FeatureDataset(BaseRAVDESSDataset):
-    def __init__(self, split="train"):
+    """
+    Dataset class for loading pre-extracted audio features.
+
+    This class loads .npy files from DATA_PROCESSED_DIR/AudioFeatureExtractor containing
+    features vector of shape (3, n_features), storing a clean, noisy and augmented version
+    of the features. During training one of the three is randomly sampled, while during
+    testing the clean one is always used.
+    """
+    def __init__(self, split: str = "train"):
+        """
+        Initializes the FeatureDataset class.
+        """
         super().__init__(split=split, subset_dir="AudioFeatureExtractor", ext=".npy")
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
         file_path = self.files[idx]
+
         # Shape: (3, N_Features) -> [Clean, Noise, Aug]
         features = np.load(file_path)
 

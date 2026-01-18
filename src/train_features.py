@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Training script for Feature-based Audio Classifier (MLP)
+"""
+
 import os
 import sys
 import pandas as pd
@@ -13,28 +17,25 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import recall_score, accuracy_score
 
-from models import CNN1DClassifier
+from models import SimpleAudioClassifier
 from loaders import FeatureDataset
-from utils.paths import RESULTS_DIR, MODELS_DIR, ensure_paths
-from utils.config import LABEL2ID
+from utils.config import LABEL2ID, RESULTS_DIR, MODELS_DIR, NUM_LABELS, ensure_paths
 
 import warnings
-
 if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
 
-def train():
+def train() -> None:
+    """
+    Main training method.
+    """
     model_path = MODELS_DIR / "best_features_model"
     feature_results_path = RESULTS_DIR / "feature"
     ensure_paths([feature_results_path, model_path])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Hyperparameters
-    BATCH_SIZE = 64
-    LEARNING_RATE = 1e-3
-    EPOCHS = 50
+    print(f"Using device: {device}")
 
     try:
         train_ds = FeatureDataset(split="train")
@@ -43,7 +44,7 @@ def train():
         print(f"Error loading datasets. Ensure 'preprocess.py' was run. Details: {e}")
         return
 
-    # weight calculations
+    # Weight calculations
     label_counts = Counter()
     for f in train_ds.files:
         l = train_ds._get_label(f)
@@ -55,36 +56,39 @@ def train():
 
     for i in range(num_classes):
         count = label_counts.get(i, 0)
-        if count == 0:
-            weight = 1.0
-        else:
-            weight = total_samples / (num_classes * count)
+        weight = 1.0 if count == 0 else total_samples / (num_classes * count)
         class_weights.append(weight)
 
     weights_tensor = torch.tensor(class_weights).float().to(device)
 
     # Create standard PyTorch DataLoaders
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=2)
+    val_loader = DataLoader(val_ds, batch_size=64, shuffle=False, num_workers=2)
 
     # Detect dimensions
     sample_input = train_ds[0]["features"]
     input_dim = sample_input.shape[0]
-    num_labels = 8
 
-    model = SimpleAudioClassifier(input_dim=input_dim, num_labels=num_labels).to(device)
+    model = SimpleAudioClassifier(input_dim=input_dim, num_labels=NUM_LABELS).to(device)
 
     criterion = nn.CrossEntropyLoss(weight=weights_tensor)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    # Learning rate scheduler
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.1, patience=5
+    )
 
     best_val_acc = 0.0
     history = []
 
-    for epoch in range(EPOCHS):
+    epochs = 50
+    for epoch in range(epochs):
+        # Training
         model.train()
         train_loss = 0.0
 
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{EPOCHS} [Train]", leave=False):
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", leave=False):
             features = batch["features"].to(device)
             labels = batch["labels"].to(device)
 
@@ -99,13 +103,14 @@ def train():
 
         avg_train_loss = train_loss / len(train_ds)
 
+        # Validation
         model.eval()
         val_loss = 0.0
         all_preds = []
         all_labels = []
 
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{EPOCHS} [Val]", leave=False):
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{epochs} [Val]", leave=False):
                 features = batch["features"].to(device)
                 labels = batch["labels"].to(device)
 
@@ -120,19 +125,20 @@ def train():
                 all_labels.extend(labels.cpu().numpy())
 
         avg_val_loss = val_loss / len(val_ds)
-
-        # Calculate Metrics
         val_acc = accuracy_score(all_labels, all_preds)
         val_uar = recall_score(all_labels, all_preds, average='macro')
 
-        # Store logs
-        history.append({
+        scheduler.step(avg_val_loss)
+
+        logs = {
             "epoch": epoch + 1,
             "loss": avg_train_loss,
             "eval_loss": avg_val_loss,
             "eval_accuracy": val_acc,
             "eval_uar": val_uar
-        })
+        }
+        print(f"Epoch {epoch + 1}: Loss={avg_train_loss:.4f} | Val Loss={avg_val_loss:.4f} | Acc={val_acc:.4f}")
+        history.append(logs)
 
         # Save Best Model
         if val_acc > best_val_acc:
@@ -149,7 +155,7 @@ def train():
 
     plt.figure(figsize=(12, 5))
 
-    # Plot Loss
+    # Loss
     plt.subplot(1, 2, 1)
     sns.lineplot(data=df_metrics, x='epoch', y='loss', label='Train Loss', marker='o')
     sns.lineplot(data=df_metrics, x='epoch', y='eval_loss', label='Validation Loss', marker='o')
@@ -158,7 +164,7 @@ def train():
     plt.ylabel("Loss")
     plt.grid(True)
 
-    # Plot Accuracy & Recall
+    # Accuracy
     plt.subplot(1, 2, 2)
     sns.lineplot(data=df_metrics, x='epoch', y='eval_accuracy', label='Val Accuracy', marker='s')
     sns.lineplot(data=df_metrics, x='epoch', y='eval_uar', label='Val UAR (Recall)', marker='s')
@@ -171,7 +177,6 @@ def train():
     plot_path = os.path.join(feature_results_path, "training_history_features.png")
     plt.savefig(plot_path)
     print(f"Training plots saved to: {plot_path}")
-
 
 if __name__ == "__main__":
     train()

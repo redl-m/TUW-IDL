@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
+"""
+Training script for the Wav2Vec2 Audio Classifier.
+"""
+
+from loaders import WaveformDataset
+from models import Wav2Vec2Classifier
+from utils.config import LABEL2ID, RESULTS_DIR, MODELS_DIR, ensure_paths
+
 import os
 import sys
 
-from loaders import WaveformDataset
-from models import create_wav2vec2_model
-from utils.paths import RESULTS_DIR, MODELS_DIR, ensure_paths
-from utils.config import LABEL2ID
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -26,11 +31,17 @@ if not sys.warnoptions:
 
 
 class WeightedTrainer(Trainer):
-    def __init__(self, class_weights, *args, **kwargs):
+    """
+    Custom HuggingFace Trainer, such that it supports class weights.
+    """
+    def __init__(self, class_weights: torch.Tensor, *args, **kwargs) -> None:
+        """
+        Initializes the WeightedTrainer class.
+        """
         super().__init__(*args, **kwargs)
         self.class_weights = class_weights
 
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def compute_loss(self, model: nn.Module, inputs: Dict[str, torch.Tensor], return_outputs: bool = False, **kwargs) -> Any:
         """
         Override the default loss computation to use Weighted Cross Entropy.
         Everything else stays the same and is inherited from Trainer
@@ -39,6 +50,7 @@ class WeightedTrainer(Trainer):
         outputs = model(**inputs)
         logits = outputs.get("logits")
 
+        # Move weights to the correct device (GPU/CPU)
         weight_tensor = self.class_weights.to(logits.device)
 
         # Compute weighted loss
@@ -47,7 +59,10 @@ class WeightedTrainer(Trainer):
 
         return (loss, outputs) if return_outputs else loss
 
-def compute_metrics(eval_pred):
+def compute_metrics(eval_pred) -> Dict[str, float]:
+    """
+    Computes metrics for evaluation during training.
+    """
     predictions, labels = eval_pred
     preds = np.argmax(predictions, axis=1)
 
@@ -56,7 +71,10 @@ def compute_metrics(eval_pred):
 
     return {"accuracy": acc, "uar": uar}
 
-def train():
+def train() -> None:
+    """
+    Main training method.
+    """
     model_path = MODELS_DIR / "best_waveform_model"
     waveform_results_path = RESULTS_DIR / "waveform"
     ensure_paths([waveform_results_path, model_path])
@@ -85,8 +103,8 @@ def train():
 
     class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32)
 
-    # Initialize model with 8 labels
-    model = create_wav2vec2_model(num_labels=8)
+    # Initialize model
+    model = Wav2Vec2Classifier()
 
     # Define training arguments
     training_args = TrainingArguments(
@@ -102,13 +120,14 @@ def train():
         load_best_model_at_end=True,
         fp16=torch.cuda.is_available(),
         report_to=[],
-        remove_unused_columns=False
+        remove_unused_columns=False,
+        gradient_checkpointing=True
     )
 
     # Set up the trainer
     trainer = WeightedTrainer(
         class_weights=class_weights_tensor,
-        model=model,
+        model=model.wav2vec2,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
@@ -120,12 +139,11 @@ def train():
 
     # Save the final model
     trainer.save_model(model_path)
-
     metrics = trainer.evaluate()
     print(f"Best model with accuracy of {metrics['eval_accuracy']:.4f} saved to: {model_path}")
 
+    # Extract logs
     history = trainer.state.log_history
-
     train_logs = [x for x in history if 'loss' in x and 'epoch' in x]
     eval_logs = [x for x in history if 'eval_loss' in x and 'epoch' in x]
 
@@ -145,7 +163,7 @@ def train():
     # Plot the Results
     plt.figure(figsize=(12, 5))
 
-    # Plot - Loss Curve
+    # Loss Curve
     plt.subplot(1, 2, 1)
     sns.lineplot(data=df_metrics, x='epoch', y='loss', label='Train Loss', marker='o')
     sns.lineplot(data=df_metrics, x='epoch', y='eval_loss', label='Validation Loss', marker='o')
@@ -154,7 +172,7 @@ def train():
     plt.ylabel("Loss")
     plt.grid(True)
 
-    # Plot - Accuracy & UAR
+    # Accuracy & UAR
     plt.subplot(1, 2, 2)
     sns.lineplot(data=df_metrics, x='epoch', y='eval_accuracy', label='Val Accuracy', marker='s')
     sns.lineplot(data=df_metrics, x='epoch', y='eval_uar', label='Val UAR (Recall)', marker='s')

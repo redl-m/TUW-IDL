@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 
+"""
+script to download the RAVDESS dataset from Kaggle.
+"""
+
+from src.utils.config import DATA_RAW_DIR, ensure_paths
+
 import os
-
-from src.utils.paths import DATA_RAW_DIR, ensure_paths
-
 import kagglehub
 import shutil
 
+
 ensure_paths([DATA_RAW_DIR])
 
-# Download to kagglehub cache
+# Download from kagglehub to cache
 download_path = kagglehub.dataset_download("uwrfkaggler/ravdess-emotional-speech-audio")
 download_path = os.path.join(download_path, "audio_speech_actors_01-24")
 

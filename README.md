@@ -1,19 +1,19 @@
 # Speech Emotion Recognition (SER) with Wav2Vec 2.0
 
-This project implements a Speech Emotion Recognition (SER) system using the **RAVDESS** dataset and **Wav2Vec 2.0** as well as **MLP**. It leverages End-to-End Deep Learning to classify speech into 8 emotional categories (neutral, calm, happy, sad, angry, fearful, disgust, surprised) directly from raw audio waveforms.
+This project implements a Speech Emotion Recognition (SER) system using the **RAVDESS** dataset to train an End-To-End **Wav2Vec 2.0** model, as well as feature-based **MLP**. It leverages End-to-End Deep Learning to classify speech into 8 emotional categories (neutral, calm, happy, sad, angry, fearful, disgust, surprised) directly from raw audio waveforms.
 
 This is a university project created by **Alexander**, **Michi**, and **Pollyana**.
 
 ## Project Overview
 
 * **Models:**
-    * **Main:** Fine-tuned `facebook/wav2vec2-large-xlsr-53` (Wav2Vec 2.0) with a custom classification head.
-    * **Baseline:** Residual MLP (ResNet-style Multi-Layer Perceptron) trained on handcrafted acoustic features.
+    * **Main:** Fine-tuned `facebook/wav2vec2-base` (Wav2Vec 2.0) with a custom classification head.
+    * **Baseline:** MLP (Multi layer perceptron) trained on handcrafted acoustic features.
 * **Architectures:**
     * **End-to-End:** Transformer-based architecture operating directly on raw audio waveforms (Wav2Vec).
     * **Feature-Based:** Statistical classifier operating on extracted features (MFCCs, Chroma, Spectral Contrast, Zero Crossing Rate).
-* **Augmentation:** Real-time GPU-accelerated audio augmentation (Noise, Pitch Shift, Gain) using `torch-audiomentations` (Waveform) and `librosa` effects (Features).
-* **Dataset:** RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song).
+* **Augmentation:** Real-time audio augmentation (Noise, Pitch Shift, Gain) using `audiomentations` (Waveform) and `librosa` effects (Features).
+* **Dataset:** RAVDESS (Ryerson Audio-Visual Daacceleratedtabase of Emotional Speech and Song).
 
 ## Project Structure
 
@@ -47,8 +47,7 @@ This is a university project created by **Alexander**, **Michi**, and **Pollyana
 │   │   ├── features.py
 │   │   └── waveform.py
 │   ├── utils/              # Helper modules
-│   │   ├── config.py
-│   │   └── paths.py
+│   │   └── config.py
 │   ├── preprocess.py       # Main preprocessing script
 │   ├── train_features.py   # Training script for MLP (Baseline)
 │   └── train_waveform.py   # Training script for Wav2Vec 2.0 (Main)
@@ -88,6 +87,7 @@ We provide a Docker container to ensure a reproducible environment with GPU supp
       -v "$(pwd)/src:/workspace/src" \
       -v "$(pwd)/data:/workspace/data" \
       -v "$(pwd)/models:/workspace/models" \
+      -v "$(pwd)/cache:/workspace/cache" \
       dl-dev
     ```
     
@@ -130,9 +130,10 @@ pip install -r requirements.txt
 We structured different parts of our project into different files. Therefore, to evaluate
 the model the following files have to be executed in this order:
 
-1. `src/preprocess.py`
-2. `src/train.py`
-3. `src/evaluate.py`
+1. `download_data.py` to download the RAVDESS dataset from Kaggle.
+2. `src/preprocess.py` to convert the raw audio into 16kHz waveforms and extract features.
+3. `src/train.py` to train the models.
+4. `src/evaluate.py` and finally, to evaluate the trained model.
 
 This can be done either by running each command on its own:
 
@@ -140,17 +141,23 @@ This can be done either by running each command on its own:
 docker compose run --rm python python3 src/script.py
 ```
 
-or by starting a new bash session inside the docker container:
+, by starting a new bash session inside the docker container:
 
 ```bash
 docker compose run --rm --entrypoint bash python
+```
+
+or by running it locally
+
+```bash
+python src/script.py
 ```
 
 ## MISC
 
 ### NIXOS
 
-A `shell.nix` file is also available, though only recommended for experienced users 
+A `shell.nix` file is available, though only recommended for experienced users 
 with nix/linux. Furthermore, the default `python` service in `docker-compose.yml` will 
 not work on nixos. Thus, use `python-nx`. For further information take a look at
 [source](https://discourse.nixos.org/t/nvidia-docker-container-runtime-doesnt-detect-my-gpu/51336/15).

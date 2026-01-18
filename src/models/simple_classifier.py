@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 
+from utils.config import NUM_LABELS
+
+import torch
 import torch.nn as nn
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, hidden_dim, dropout):
+    """
+    A residual block with two linear layers, batch normalization, and dropout.
+    """
+    def __init__(self, hidden_dim: int , dropout: float) -> None:
+        """
+        Initializes the ResidualBlock class.
+        """
         super().__init__()
         self.block = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
@@ -16,15 +25,18 @@ class ResidualBlock(nn.Module):
         )
         self.relu = nn.ReLU()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
         out = self.block(x)
-        out += residual  # Skip connection
+        out += residual
         return self.relu(out)
 
 
 class SimpleAudioClassifier(nn.Module):
-    def __init__(self, input_dim: int, num_labels: int, hidden_dim: int = 512, dropout: float = 0.3):
+    """
+    A ResNet-style Multi-Layer Perceptron (MLP) for audio classification.
+    """
+    def __init__(self, input_dim: int, num_labels: int, hidden_dim: int = 512, dropout: float = 0.3) -> None:
         super().__init__()
 
         # Project input up to hidden dimension
@@ -35,7 +47,7 @@ class SimpleAudioClassifier(nn.Module):
             nn.Dropout(dropout)
         )
 
-        # Stack of Residual Blocks (ResNet-style MLP)
+        # Stack of Residual Blocks
         self.res_blocks = nn.Sequential(
             ResidualBlock(hidden_dim, dropout),
             ResidualBlock(hidden_dim, dropout),
@@ -50,13 +62,14 @@ class SimpleAudioClassifier(nn.Module):
             nn.Linear(hidden_dim // 2, num_labels)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.initial_layer(x)
         x = self.res_blocks(x)
         return self.classifier(x)
 
 if __name__ == "__main__":
-    model = SimpleAudioClassifier(input_dim=784, num_labels=8)
+    # Test the model with dummy inputs
+    model = SimpleAudioClassifier(input_dim=784, num_labels=NUM_LABELS)
 
     # Print the model summary
     print("Model successfully initialized!")

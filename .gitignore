@@ -210,3 +210,6 @@ data
 /models
 results
 cache
+
+Makefile
+project.zip
